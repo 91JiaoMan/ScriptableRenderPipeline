@@ -16,6 +16,7 @@ namespace UnityEngine.Rendering.HighDefinition
             AddPostProcessFrameSettings,
             AddRayTracingFrameSettings,
             AddFrameSettingDirectSpecularLighting,
+            ScalableSettingsRefactor,
         }
 
         static readonly MigrationDescription<Version, HDRenderPipelineAsset> k_Migration = MigrationDescription.New(
@@ -54,8 +55,14 @@ namespace UnityEngine.Rendering.HighDefinition
                 FrameSettings.MigrateToDirectSpecularLighting(ref data.m_RenderingPathDefaultCameraFrameSettings);
                 FrameSettings.MigrateToNoDirectSpecularLighting(ref data.m_RenderingPathDefaultBakedOrCustomReflectionFrameSettings);
                 FrameSettings.MigrateToDirectSpecularLighting(ref data.m_RenderingPathDefaultRealtimeReflectionFrameSettings);
-            })            
-        );
+            }),
+            MigrationStep.New(Version.ScalableSettingsRefactor, (HDRenderPipelineAsset data) =>
+            {
+                ref var shadowInit = ref data.m_RenderPipelineSettings.hdShadowInitParams;
+                shadowInit.shadowResolutionArea.schemaId = ScalableSettingSchemaId.With4Levels;
+                shadowInit.shadowResolutionDirectional.schemaId = ScalableSettingSchemaId.With4Levels;
+                shadowInit.shadowResolutionPunctual.schemaId = ScalableSettingSchemaId.With4Levels;
+            }));
 
         [SerializeField]
         Version m_Version;

@@ -1,37 +1,28 @@
 using System;
 using UnityEngine;
+using UnityEngine.Rendering.HighDefinition;
 
 namespace UnityEditor.Rendering.HighDefinition
 {
     public class SerializedScalableSetting
     {
         public SerializedProperty values;
+        public SerializedProperty schemaId;
 
         public SerializedScalableSetting(SerializedProperty property)
         {
             values = property.FindPropertyRelative("m_Values");
+            schemaId = property.FindPropertyRelative("m_SchemaId.m_Id");
         }
     }
 
     public static class SerializedScalableSettingUI
     {
-        private static readonly GUIContent[] k_Shorts =
-        {
-            new GUIContent("L", "Low"),
-            new GUIContent("M", "Medium"),
-            new GUIContent("H", "High"),
-            new GUIContent("U", "Ultra"),
-        };
-        private static readonly GUIContent[] k_Full =
-        {
-            new GUIContent("Low", "Low"),
-            new GUIContent("Medium", "Medium"),
-            new GUIContent("High", "High"),
-            new GUIContent("Ultra", "Ultra"),
-        };
-
         public static void ValueGUI<T>(this SerializedScalableSetting self, GUIContent label)
         {
+            var schema = ScalableSettingSchema.GetSchemaOrNull(new ScalableSettingSchemaId(self.schemaId.stringValue))
+                ?? ScalableSettingSchema.GetSchemaOrNull(ScalableSettingSchemaId.With3Levels);
+
             var rect = GUILayoutUtility.GetRect(0, float.Epsilon, 0, EditorGUIUtility.singleLineHeight);
             // Magic Number !!
             rect.x += 3;
@@ -41,12 +32,15 @@ namespace UnityEditor.Rendering.HighDefinition
             var contentRect = EditorGUI.PrefixLabel(rect, label);
             EditorGUI.showMixedValue = self.values.hasMultipleDifferentValues;
 
-            var count = self.values.arraySize;
+            var count = schema.levelCount;
+
+            if (self.values.arraySize != count)
+                self.values.arraySize = count;
 
             if (typeof(T) == typeof(bool))
             {
                 var labels = new GUIContent[count];
-                Array.Copy(k_Full, labels, count);
+                Array.Copy(schema.levelNames, labels, count);
                 var values = new bool[count];
                 for (var i = 0; i < count; ++i)
                     values[i] = self.values.GetArrayElementAtIndex(i).boolValue;
@@ -61,7 +55,7 @@ namespace UnityEditor.Rendering.HighDefinition
             else if (typeof(T) == typeof(int))
             {
                 var labels = new GUIContent[count];
-                Array.Copy(k_Shorts, labels, count);
+                Array.Copy(schema.levelNames, labels, count);
                 var values = new int[count];
                 for (var i = 0; i < count; ++i)
                     values[i] = self.values.GetArrayElementAtIndex(i).intValue;
@@ -76,7 +70,7 @@ namespace UnityEditor.Rendering.HighDefinition
             else if (typeof(T) == typeof(float))
             {
                 var labels = new GUIContent[count];
-                Array.Copy(k_Shorts, labels, count);
+                Array.Copy(schema.levelNames, labels, count);
                 var values = new float[count];
                 for (var i = 0; i < count; ++i)
                     values[i] = self.values.GetArrayElementAtIndex(i).floatValue;

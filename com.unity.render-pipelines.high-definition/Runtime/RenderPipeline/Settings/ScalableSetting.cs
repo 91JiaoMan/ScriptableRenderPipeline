@@ -36,9 +36,11 @@ namespace UnityEngine.Rendering.HighDefinition
         public static readonly ScalableSettingSchemaId With3Levels = new ScalableSettingSchemaId("With3Levels");
         public static readonly ScalableSettingSchemaId With4Levels = new ScalableSettingSchemaId("With4Levels");
 
-        public readonly string id;
+        [SerializeField]
+        string m_Id;
+        public string id => m_Id;
 
-        internal ScalableSettingSchemaId(string id) => this.id = id;
+        internal ScalableSettingSchemaId(string id) => m_Id = id;
     }
 
     [Serializable]
