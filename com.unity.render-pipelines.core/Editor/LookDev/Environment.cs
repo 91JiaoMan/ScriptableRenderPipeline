@@ -22,7 +22,7 @@ namespace UnityEditor.Rendering.LookDev
         /// <summary>
         /// Exposure to use with this Sky
         /// </summary>
-        public float exposure = 1f;
+        public float exposure = 0f;
 
         // Setup default position to be on the sun in the default HDRI.
         // This is important as the defaultHDRI don't call the set brightest spot function on first call.
