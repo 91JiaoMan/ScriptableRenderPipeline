@@ -233,7 +233,7 @@ namespace UnityEditor.Rendering.LookDev
         {
             var renderingData = m_RenderDataCache[(int)index];
             renderingData.viewPort = viewport;
-            Environment env = m_Contexts.GetViewContent(index).environment;
+            ViewContext view = m_Contexts.GetViewContent(index);
 
             m_RenderTextures.UpdateSize(renderingData.viewPort, index, m_Renderer.pixelPerfect, renderingData.stage.camera);
 
@@ -245,13 +245,15 @@ namespace UnityEditor.Rendering.LookDev
             m_Renderer.BeginRendering(renderingData);
             m_Renderer.Acquire(renderingData);
 
-            //get shadowmask betwen first and last pass to still be isolated
-            RenderTexture tmp = m_RenderTextures[index, ShadowCompositionPass.ShadowMask];
-            env?.UpdateSunPosition(renderingData.stage.sunLight);
-            renderingData.stage.sunLight.intensity = 1f;
-            m_DataProvider.GetShadowMask(ref tmp, renderingData.stage.runtimeInterface);
-            renderingData.stage.sunLight.intensity = 0f;
-            m_RenderTextures[index, ShadowCompositionPass.ShadowMask] = tmp;
+            if (view.debug.shadow)
+            {
+                RenderTexture tmp = m_RenderTextures[index, ShadowCompositionPass.ShadowMask];
+                view.environment?.UpdateSunPosition(renderingData.stage.sunLight);
+                renderingData.stage.sunLight.intensity = 1f;
+                m_DataProvider.GetShadowMask(ref tmp, renderingData.stage.runtimeInterface);
+                renderingData.stage.sunLight.intensity = 0f;
+                m_RenderTextures[index, ShadowCompositionPass.ShadowMask] = tmp;
+            }
 
             m_Renderer.EndRendering(renderingData);
 
