@@ -315,8 +315,8 @@ namespace UnityEditor.Rendering.LookDev
             float toneMapEnabled = -1f; //1f true, -1f false
             float shadowMultiplier0 = skipShadowComposition0 ? -1f : 1.0f;
             float shadowMultiplier1 = skipShadowComposition1 ? -1f : 1.0f;
-            Color shadowColor0 = env0?.color ?? Color.white;
-            Color shadowColor1 = env1?.color ?? Color.white;
+            Color shadowColor0 = env0?.shadowColor ?? Color.white;
+            Color shadowColor1 = env1?.shadowColor ?? Color.white;
 
             //TODO: handle shadow not at compositing step but in rendering
             Texture texMainView0 = m_RenderTextures[ViewIndex.First, ShadowCompositionPass.MainView];

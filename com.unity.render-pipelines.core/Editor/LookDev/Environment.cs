@@ -56,7 +56,7 @@ namespace UnityEditor.Rendering.LookDev
         /// <summary>
         /// The shading tint to used when computing shadow from sun
         /// </summary>
-        public Color color = new Color(0.7f, 0.7f, 0.7f);
+        public Color shadowColor = new Color(0.7f, 0.7f, 0.7f);
 
         /// <summary>
         /// The Latitude position of the sun casting shadows
@@ -105,7 +105,7 @@ namespace UnityEditor.Rendering.LookDev
             other.rotation = rotation;
             other.sunLatitude = sunLatitude;
             other.sunLongitude = sunLongitude;
-            other.color = color;
+            other.shadowColor = shadowColor;
             other.name = name + " (copy)";
         }
 
@@ -218,7 +218,7 @@ namespace UnityEditor.Rendering.LookDev
             skyRotationOffset.SetValueWithoutNotify(environment.rotation);
             skyExposureField.SetValueWithoutNotify(environment.exposure);
             sunPosition.SetValueWithoutNotify(new Vector2(environment.sunLongitude, environment.sunLatitude));
-            shadowColor.SetValueWithoutNotify(environment.color);
+            shadowColor.SetValueWithoutNotify(environment.shadowColor);
             environmentName.SetValueWithoutNotify(environment.name);
         }
 
@@ -423,7 +423,7 @@ namespace UnityEditor.Rendering.LookDev
                 tooltip = "The wanted shadow tint to be used when computing shadow."
             };
             shadowColor.RegisterValueChangedCallback(evt
-                => RegisterChange(ref environment.color, evt.newValue));
+                => RegisterChange(ref environment.shadowColor, evt.newValue));
             foldout.Add(shadowColor);
 
             style = foldout.Q<Toggle>().style;
