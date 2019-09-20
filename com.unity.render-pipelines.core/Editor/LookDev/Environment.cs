@@ -2,7 +2,6 @@ using UnityEngine;
 using System;
 using UnityEngine.UIElements;
 using UnityEditor.UIElements;
-using System.Linq;
 
 namespace UnityEditor.Rendering.LookDev
 {
