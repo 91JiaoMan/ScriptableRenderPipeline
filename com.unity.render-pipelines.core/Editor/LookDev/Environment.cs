@@ -16,6 +16,27 @@ namespace UnityEditor.Rendering.LookDev
         Cubemap m_Cubemap;
 
         /// <summary>
+        /// Offset on the longitude. Affect both sky and sun position in Shadow part
+        /// </summary>
+        public float rotation = 0.0f;
+        /// <summary>
+        /// Exposure to use with this Sky
+        /// </summary>
+        public float exposure = 1f;
+
+        // Setup default position to be on the sun in the default HDRI.
+        // This is important as the defaultHDRI don't call the set brightest spot function on first call.
+        [SerializeField]
+        float m_Latitude = 60.0f; // [-90..90]
+        [SerializeField]
+        float m_Longitude = 299.0f; // [0..360[
+
+        /// <summary>
+        /// The shading tint to used when computing shadow from sun
+        /// </summary>
+        public Color shadowColor = new Color(0.7f, 0.7f, 0.7f);
+
+        /// <summary>
         /// The cubemap used for this part of the lighting environment
         /// </summary>
         public Cubemap cubemap
@@ -33,6 +54,43 @@ namespace UnityEditor.Rendering.LookDev
             }
         }
 
+        /// <summary>
+        /// The Latitude position of the sun casting shadows
+        /// </summary>
+        public float sunLatitude
+        {
+            get => m_Latitude;
+            set => m_Latitude = ClampLatitude(value);
+        }
+
+        /// <summary>
+        /// The Longitude position of the sun casting shadows
+        /// </summary>
+        public float sunLongitude
+        {
+            get => m_Longitude;
+            set => m_Longitude = ClampLongitude(value);
+        }
+
+        internal static float ClampLatitude(float value) => Mathf.Clamp(value, -90, 90);
+        
+        internal static float ClampLongitude(float value)
+        {
+            value = value % 360f;
+            if (value < 0.0)
+                value += 360f;
+            return value;
+        }
+
+        internal void UpdateSunPosition(Light sun)
+            => sun.transform.rotation = Quaternion.Euler(sunLatitude, rotation + sunLongitude, 0f);
+        
+        /// <summary>
+        /// Compute sun position to be brightest spot of the sky
+        /// </summary>
+        public void ResetToBrightestSpot()
+            => EnvironmentElement.ResetToBrightestSpot(this);
+
         void LoadCubemap()
         {
             m_Cubemap = null;
@@ -45,58 +103,6 @@ namespace UnityEditor.Rendering.LookDev
                 m_Cubemap = AssetDatabase.LoadAssetAtPath<Cubemap>(path);
             }
         }
-
-        // Setup default position to be on the sun in the default HDRI.
-        // This is important as the defaultHDRI don't call the set brightest spot function on first call.
-        [SerializeField]
-        float m_Latitude = 60.0f; // [-90..90]
-        [SerializeField]
-        float m_Longitude = 299.0f; // [0..360[
-
-        /// <summary>
-        /// The shading tint to used when computing shadow from sun
-        /// </summary>
-        public Color shadowColor = new Color(0.7f, 0.7f, 0.7f);
-
-        /// <summary>
-        /// The Latitude position of the sun casting shadows
-        /// </summary>
-        public float sunLatitude
-        {
-            get => m_Latitude;
-            set => m_Latitude = ClampLatitude(value);
-        }
-
-        internal static float ClampLatitude(float value) => Mathf.Clamp(value, -90, 90);
-
-        /// <summary>
-        /// The Longitude position of the sun casting shadows
-        /// </summary>
-        public float sunLongitude
-        {
-            get => m_Longitude;
-            set => m_Longitude = ClampLongitude(value);
-        }
-
-        internal static float ClampLongitude(float value)
-        {
-            value = value % 360f;
-            if (value < 0.0)
-                value += 360f;
-            return value;
-        }
-
-        /// <summary>
-        /// Offset on the longitude. Affect both sky and sun position in Shadow part
-        /// </summary>
-        public float rotation = 0.0f;
-        /// <summary>
-        /// Exposure to use with this Sky
-        /// </summary>
-        public float exposure = 1f;
-
-        internal void UpdateSunPosition(Light sun)
-            => sun.transform.rotation = Quaternion.Euler(sunLatitude, rotation + sunLongitude, 0f);
 
         internal void CopyTo(Environment other)
         {
@@ -120,12 +126,6 @@ namespace UnityEditor.Rendering.LookDev
                 longitudeOffset = rotation,
                 exposure = exposure
             };
-
-        /// <summary>
-        /// Compute sun position to be brightest spot of the sky
-        /// </summary>
-        public void ResetToBrightestSpot()
-            => EnvironmentElement.ResetToBrightestSpot(this);
     }
 
     [CustomEditor(typeof(Environment))]
