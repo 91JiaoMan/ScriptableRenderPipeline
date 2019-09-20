@@ -1,89 +1,113 @@
 using System;
-using UnityEngine.Assertions;
-using UnityEngine.Serialization;
+using System.Collections.Generic;
 
 namespace UnityEngine.Rendering.HighDefinition
 {
-    public static class ScalableSetting
+    public class ScalableSettingSchema
     {
-        public static readonly int LevelCount = Enum.GetValues(typeof(Level)).Length;
-        public enum Level
+        internal static readonly Dictionary<ScalableSettingSchemaId, ScalableSettingSchema> Schemas = new Dictionary<ScalableSettingSchemaId, ScalableSettingSchema>
         {
-            Low,
-            Medium,
-            High
+            { ScalableSettingSchemaId.With3Levels, new ScalableSettingSchema(new[] {
+                new GUIContent("Low"), new GUIContent("Medium"), new GUIContent("High")
+            }) },
+            { ScalableSettingSchemaId.With4Levels, new ScalableSettingSchema(new[] {
+                new GUIContent("Low"), new GUIContent("Medium"), new GUIContent("High"), new GUIContent("Ultra")
+            }) },
+        };
+
+        internal static ScalableSettingSchema GetSchemaOrNull(ScalableSettingSchemaId id)
+            => Schemas.TryGetValue(id, out var value) ? value : null;
+        internal static ScalableSettingSchema GetSchemaOrNull(ScalableSettingSchemaId? id)
+            => id.HasValue && Schemas.TryGetValue(id.Value, out var value) ? value : null;
+
+        public readonly GUIContent[] levelNames;
+
+        public int levelCount => levelNames.Length;
+
+        public ScalableSettingSchema(GUIContent[] levelNames)
+        {
+            this.levelNames = levelNames;
         }
     }
 
     [Serializable]
-    public class ScalableSetting<T>
+    public struct ScalableSettingSchemaId
     {
-        [SerializeField]
-        private T m_Low;
-        [SerializeField]
-        private T m_Medium;
-        [SerializeField]
-        private T m_High;
+        public static readonly ScalableSettingSchemaId With3Levels = new ScalableSettingSchemaId("With3Levels");
+        public static readonly ScalableSettingSchemaId With4Levels = new ScalableSettingSchemaId("With4Levels");
 
-        public T this[ScalableSetting.Level index]
+        public readonly string id;
+
+        internal ScalableSettingSchemaId(string id) => this.id = id;
+    }
+
+    [Serializable]
+    public class ScalableSetting<T>: ISerializationCallbackReceiver
+    {
+        [SerializeField] private T[] m_Values;
+        [SerializeField] private ScalableSettingSchemaId m_SchemaId;
+
+        public ScalableSetting(T[] values, ScalableSettingSchemaId schemaId)
         {
-            get
-            {
-                switch (index)
-                {
-                    case ScalableSetting.Level.Low: return m_Low;
-                    case ScalableSetting.Level.Medium: return m_Medium;
-                    case ScalableSetting.Level.High: return m_High;
-                    default: throw new ArgumentOutOfRangeException(nameof(index));
-                }
-            }
-            set
-            {
-                switch (index)
-                {
-                    case ScalableSetting.Level.Low: m_Low = value; break;
-                    case ScalableSetting.Level.Medium: m_Medium = value; break;
-                    case ScalableSetting.Level.High: m_High = value; break;
-                    default: throw new ArgumentOutOfRangeException(nameof(index));
-                }
-            }
+            m_Values = values;
+            m_SchemaId = schemaId;
         }
 
-        public T low
+        public ScalableSettingSchemaId schemaId
         {
-            get => m_Low;
-            set => m_Low = value;
+            get => m_SchemaId;
+            set => m_SchemaId = value;
+        }
+        public T this[int index] => m_Values != null && index >= 0 && index < m_Values.Length ? m_Values[index] : default;
+
+        void ISerializationCallbackReceiver.OnAfterDeserialize()
+        {
+            if (ScalableSettingSchema.Schemas.TryGetValue(m_SchemaId, out var schema))
+                Array.Resize(ref m_Values, schema.levelCount);
         }
 
-        public T medium
+        void ISerializationCallbackReceiver.OnBeforeSerialize()
         {
-            get => m_Medium;
-            set => m_Medium = value;
-        }
-
-        public T high
-        {
-            get => m_High;
-            set => m_High = value;
+            if (ScalableSettingSchema.Schemas.TryGetValue(m_SchemaId, out var schema))
+                Array.Resize(ref m_Values, schema.levelCount);
         }
     }
 
-    [Serializable] public class IntScalableSetting: ScalableSetting<int> {}
-    [Serializable] public class UintScalableSetting: ScalableSetting<uint> {}
-    [Serializable] public class FloatScalableSetting: ScalableSetting<float> {}
-    [Serializable] public class BoolScalableSetting: ScalableSetting<bool> {}
+    [Serializable]
+    public class IntScalableSetting : ScalableSetting<int>
+    {
+        public IntScalableSetting(int[] values, ScalableSettingSchemaId schemaId) : base(values, schemaId) { }
+    }
+    [Serializable]
+    public class UintScalableSetting : ScalableSetting<uint>
+    {
+        public UintScalableSetting(uint[] values, ScalableSettingSchemaId schemaId) : base(values, schemaId) { }
+    }
+    [Serializable]
+    public class FloatScalableSetting : ScalableSetting<float>
+    {
+        public FloatScalableSetting(float[] values, ScalableSettingSchemaId schemaId) : base(values, schemaId) { }
+    }
+    [Serializable]
+    public class BoolScalableSetting : ScalableSetting<bool>
+    {
+        public BoolScalableSetting(bool[] values, ScalableSettingSchemaId schemaId) : base(values, schemaId) { }
+    }
 
     [Serializable]
     public class ScalableSettingValue<T>
     {
-        [SerializeField] private ScalableSetting.Level m_Level;
-        [SerializeField] private bool m_UseOverride;
-        [SerializeField] private T m_Override;
+        [SerializeField]
+        private T m_Override;
+        [SerializeField]
+        private bool m_UseOverride;
+        [SerializeField]
+        private int m_Level;
 
-        public T @override
+        public int level
         {
-            get => m_Override;
-            set => m_Override = value;
+            get => m_Level;
+            set => m_Level = value;
         }
 
         public bool useOverride
@@ -92,21 +116,19 @@ namespace UnityEngine.Rendering.HighDefinition
             set => m_UseOverride = value;
         }
 
-        public ScalableSetting.Level level
+        public T @override
         {
-            get => m_Level;
-            set => m_Level = value;
+            get => m_Override;
+            set => m_Override = value;
         }
 
         public T Value(ScalableSetting<T> source) => m_UseOverride ? m_Override : source[m_Level];
 
-        public void CopyTo(ScalableSettingValue<T> dst)
+        public void CopyTo(ScalableSettingValue<T> target)
         {
-            Assert.IsNotNull(dst);
-
-            dst.m_Level = m_Level;
-            dst.m_UseOverride = m_UseOverride;
-            dst.m_Override = m_Override;
+            target.m_Override = m_Override;
+            target.m_UseOverride = m_UseOverride;
+            target.m_Level = m_Level;
         }
     }
 

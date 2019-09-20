@@ -238,8 +238,13 @@ namespace UnityEditor.Rendering.HighDefinition
 
                     var value = lightDataPairing[light].hdAdditionalLightData.useContactShadow;
                     EditorGUI.BeginChangeCheck();
-                    var (level, useOverride) = SerializedScalableSettingValueUI.LevelFieldGUI(r, GUIContent.none, value.level,
-                        value.useOverride);
+                    var (level, useOverride) = SerializedScalableSettingValueUI.LevelFieldGUI(
+                        r,
+                        GUIContent.none,
+                        ScalableSettingSchema.GetSchemaOrNull(ScalableSettingSchemaId.With3Levels),
+                        value.level,
+                        value.useOverride
+                    );
                     if (EditorGUI.EndChangeCheck())
                     {
                         value.level = level;
@@ -278,7 +283,13 @@ namespace UnityEditor.Rendering.HighDefinition
                     }
                     var shadowResolution = lightDataPairing[light].hdAdditionalLightData.shadowResolution;
                     EditorGUI.BeginChangeCheck();
-                    var (level, useOverride) = SerializedShadowResolutionSettingValueUI.LevelFieldGUI(r, shadowResolution.level, shadowResolution.useOverride, false);
+                    var (level, useOverride) = SerializedScalableSettingValueUI.LevelFieldGUI(
+                        r,
+                        GUIContent.none,
+                        ScalableSettingSchema.GetSchemaOrNull(ScalableSettingSchemaId.With3Levels),
+                        shadowResolution.level,
+                        shadowResolution.useOverride
+                    );
                     if (EditorGUI.EndChangeCheck())
                     {
                         shadowResolution.level = level;

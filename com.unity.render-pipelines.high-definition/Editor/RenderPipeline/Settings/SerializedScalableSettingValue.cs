@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using UnityEngine.Assertions;
 using UnityEngine.Rendering.HighDefinition;
 
 namespace UnityEditor.Rendering.HighDefinition
@@ -20,45 +21,14 @@ namespace UnityEditor.Rendering.HighDefinition
 
     public static class SerializedScalableSettingValueUI
     {
-        public interface IValueGetter<T>
+        static Rect DoGUILayout(
+            SerializedScalableSettingValue self,
+            GUIContent label,
+            ScalableSettingSchema schema
+        )
         {
-            string sourceDescription { get; }
-            T GetValue(ScalableSetting.Level level);
-        }
+            Assert.IsNotNull(schema);
 
-        public struct NoopGetter<T> : IValueGetter<T>
-        {
-            public string sourceDescription => string.Empty;
-            public T GetValue(ScalableSetting.Level level) => default;
-        }
-
-        public struct FromScalableSetting<T>: IValueGetter<T>
-        {
-            private ScalableSetting<T> m_Value;
-            private HDRenderPipelineAsset m_Source;
-
-            public FromScalableSetting(
-                ScalableSetting<T> value,
-                HDRenderPipelineAsset source)
-            {
-                m_Value = value;
-                m_Source = source;
-            }
-
-            public string sourceDescription => m_Source != null ? m_Source.name : string.Empty;
-            public T GetValue(ScalableSetting.Level level) => m_Value != null ? m_Value[level] : default;
-        }
-
-        private static readonly GUIContent[] k_LevelOptions =
-        {
-            new GUIContent("Low"),
-            new GUIContent("Medium"),
-            new GUIContent("High"),
-            new GUIContent("Custom"),
-        };
-
-        static Rect DoGUILayout(SerializedScalableSettingValue self, GUIContent label)
-        {
             var rect = GUILayoutUtility.GetRect(0, float.Epsilon, 0, EditorGUIUtility.singleLineHeight);
 
             var contentRect = EditorGUI.PrefixLabel(rect, label);
@@ -71,14 +41,23 @@ namespace UnityEditor.Rendering.HighDefinition
             enumRect.x -= k_EnumOffset;
             enumRect.width = k_EnumWidth + k_EnumOffset;
 
-            var showMixedValues = EditorGUI.showMixedValue;
-            EditorGUI.showMixedValue = self.level.hasMultipleDifferentValues || self.useOverride.hasMultipleDifferentValues;
-            var (level, isOverride) =
-                LevelFieldGUI(enumRect, GUIContent.none, (ScalableSetting.Level)self.level.intValue, self.useOverride.boolValue);
-            EditorGUI.showMixedValue = showMixedValues;
-            self.useOverride.boolValue = isOverride;
-            if (!self.useOverride.boolValue)
-                self.level.intValue = (int)level;
+            var oldShowMixedValue = EditorGUI.showMixedValue;
+            EditorGUI.showMixedValue |= self.level.hasMultipleDifferentValues || self.useOverride.hasMultipleDifferentValues;
+            EditorGUI.BeginChangeCheck();
+            var (level, useOverride) = LevelFieldGUI(
+                enumRect,
+                GUIContent.none,
+                schema,
+                self.level.intValue,
+                self.useOverride.boolValue
+            );
+            EditorGUI.showMixedValue = oldShowMixedValue;
+            if (EditorGUI.EndChangeCheck())
+            {
+                self.useOverride.boolValue = useOverride;
+                if (!self.useOverride.boolValue)
+                    self.level.intValue = level;
+            }
 
             // Return the rect fo user can render the field there
             var fieldRect = new Rect(contentRect);
@@ -88,55 +67,71 @@ namespace UnityEditor.Rendering.HighDefinition
             return fieldRect;
         }
 
-        public static (ScalableSetting.Level, bool) LevelFieldGUI(Rect rect, GUIContent label, ScalableSetting.Level level, bool useOverride)
+        public static (int level, bool useOverride) LevelFieldGUI(
+            Rect rect,
+            GUIContent label,
+            ScalableSettingSchema schema,
+            int level,
+            bool useOverride
+        )
         {
-            var enumValue = useOverride ? k_LevelOptions.Length - 1 : (int)level;
-            var newEnumValues = EditorGUI.Popup(rect, GUIContent.none, enumValue, k_LevelOptions);
-            var isOverride = newEnumValues == k_LevelOptions.Length - 1;
-            return (isOverride ? level : (ScalableSetting.Level) newEnumValues, isOverride);
+            var enumValue = useOverride ? 0 : level + 1;
+            var levelCount = schema.levelCount;
+            var options = new GUIContent[levelCount + 1];
+            options[0] = new GUIContent("Custom");
+            Array.Copy(schema.levelNames, 0, options, 1, levelCount);
+
+            var newValue = EditorGUI.Popup(rect, label, enumValue, options);
+
+            return (newValue - 1, newValue == 0);
         }
 
-        public static void LevelAndIntGUILayout<T>(this SerializedScalableSettingValue self, GUIContent label, T @default)
-            where T: struct, IValueGetter<int>
+        public static void LevelAndIntGUILayout(
+            this SerializedScalableSettingValue self,
+            GUIContent label,
+            ScalableSetting<int> sourceValue,
+            string sourceName
+        )
         {
-            var fieldRect = DoGUILayout(self, label);
-            if (self.useOverride.boolValue)
+            var schema = ScalableSettingSchema.GetSchemaOrNull(sourceValue?.schemaId)
+                ?? ScalableSettingSchema.GetSchemaOrNull(ScalableSettingSchemaId.With3Levels);
+
+            var fieldRect = DoGUILayout(self, label, schema);
+            
+            if (self.useOverride.boolValue && !self.useOverride.hasMultipleDifferentValues)
             {
                 var showMixedValues = EditorGUI.showMixedValue;
-                EditorGUI.showMixedValue = self.@override.hasMultipleDifferentValues;
+                EditorGUI.showMixedValue = self.@override.hasMultipleDifferentValues || showMixedValues;
                 self.@override.intValue = EditorGUI.IntField(fieldRect, self.@override.intValue);
                 EditorGUI.showMixedValue = showMixedValues;
             }
             else
-                EditorGUI.LabelField(fieldRect, $"{@default.GetValue((ScalableSetting.Level)self.level.intValue)} ({@default.sourceDescription})");
+                EditorGUI.LabelField(fieldRect, $"{(sourceValue != null ? sourceValue[self.level.intValue]: 0)} ({sourceName})");
         }
 
-        public static void LevelAndIntGUILayout(this SerializedScalableSettingValue self, GUIContent label)
+        public static void LevelAndToggleGUILayout(
+            this SerializedScalableSettingValue self,
+            GUIContent label,
+            ScalableSetting<bool> sourceValue,
+            string sourceName
+        )
         {
-            LevelAndIntGUILayout(self, label, new NoopGetter<int>());
-        }
+            var schema = ScalableSettingSchema.GetSchemaOrNull(sourceValue?.schemaId)
+                ?? ScalableSettingSchema.GetSchemaOrNull(ScalableSettingSchemaId.With3Levels);
 
-        public static void LevelAndToggleGUILayout<T>(this SerializedScalableSettingValue self, GUIContent label, T @default)
-            where T: struct, IValueGetter<bool>
-        {
-            var fieldRect = DoGUILayout(self, label);
+            var fieldRect = DoGUILayout(self, label, schema);
             if (self.useOverride.boolValue)
                 self.@override.boolValue = EditorGUI.Toggle(fieldRect, self.@override.boolValue);
             else
             {
                 var enabled = GUI.enabled;
                 GUI.enabled = false;
-                EditorGUI.Toggle(fieldRect, @default.GetValue((ScalableSetting.Level)self.level.intValue));
+                EditorGUI.Toggle(fieldRect, sourceValue != null ? sourceValue[self.level.intValue] : false);
                 fieldRect.x += 25;
                 fieldRect.width -= 25;
-                EditorGUI.LabelField(fieldRect, $"({@default.sourceDescription})");
+                EditorGUI.LabelField(fieldRect, $"({sourceName})");
                 GUI.enabled = enabled;
             }
-        }
-
-        public static void LevelAndToggleGUILayout(this SerializedScalableSettingValue self, GUIContent label)
-        {
-            LevelAndToggleGUILayout(self, label, new NoopGetter<bool>());
         }
     }
 }
