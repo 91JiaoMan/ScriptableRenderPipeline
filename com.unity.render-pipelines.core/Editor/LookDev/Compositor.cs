@@ -20,15 +20,13 @@ namespace UnityEditor.Rendering.LookDev
     class RenderTextureCache : IDisposable
     {
         //RenderTextures are packed this way:
-        //0: ViewIndex.First, ShadowCompositionPass.WithSun
-        //1: ViewIndex.First, ShadowCompositionPass.WithoutSun
-        //2: ViewIndex.First, ShadowCompositionPass.ShadowMask
-        //3: CompositionFinal.First
-        //4: ViewIndex.Second, ShadowCompositionPass.WithSun
-        //5: ViewIndex.Second, ShadowCompositionPass.WithoutSun
-        //6: ViewIndex.Second, ShadowCompositionPass.ShadowMask
-        //7: CompositionFinal.Second
-        RenderTexture[] m_RTs = new RenderTexture[8];
+        //0: ViewIndex.First, ShadowCompositionPass.MainView
+        //1: ViewIndex.First, ShadowCompositionPass.ShadowMask
+        //2: CompositionFinal.First
+        //3: ViewIndex.Second, ShadowCompositionPass.MainView
+        //4: ViewIndex.Second, ShadowCompositionPass.ShadowMask
+        //5: CompositionFinal.Second
+        RenderTexture[] m_RTs = new RenderTexture[6];
 
         public RenderTexture this[ViewIndex index, ShadowCompositionPass passIndex]
         {
@@ -43,9 +41,9 @@ namespace UnityEditor.Rendering.LookDev
         }
 
         int computeIndex(ViewIndex index, ShadowCompositionPass passIndex)
-            => (int)index * 4 + (int)(passIndex);
+            => (int)index * 3 + (int)(passIndex);
         int computeIndex(CompositionFinal index)
-            => 3 + (int)(index) * 4;
+            => 2 + (int)(index) * 3;
 
         void UpdateSize(int index, Rect rect, bool pixelPerfect, Camera renderingCamera, string renderDocName = "LookDevRT")
         {
