@@ -101,7 +101,7 @@ namespace UnityEditor.Rendering.LookDev
                 return;
             m_Disposed = true;
 
-            for (int index = 0; index < 8; ++index)
+            for (int index = 0; index < 6; ++index)
             {
                 if (m_RTs[index] == null || m_RTs[index].Equals(null))
                     continue;
