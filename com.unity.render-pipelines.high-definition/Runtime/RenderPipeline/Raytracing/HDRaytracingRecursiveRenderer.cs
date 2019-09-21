@@ -3,19 +3,6 @@ using UnityEngine.Experimental.Rendering;
 
 namespace UnityEngine.Rendering.HighDefinition
 {
-    [Serializable, VolumeComponentMenu("Ray Tracing/Recursive Rendering")]
-    public sealed class RecursiveRendering : VolumeComponent
-    {
-        [Tooltip("Enable. Enables recursive rendering.")]
-        public BoolParameter enable = new BoolParameter(false);
-
-        [Tooltip("Max Depth. Defines the maximal recursion for rays.")]
-        public ClampedIntParameter maxDepth = new ClampedIntParameter(4, 1, 10);
-
-        [Tooltip("Ray Length. This defines the maximal travel distance of rays.")]
-        public ClampedFloatParameter rayLength = new ClampedFloatParameter(10f, 0f, 50f);
-    }
-
 #if ENABLE_RAYTRACING
     public partial class HDRenderPipeline
     {
@@ -36,8 +23,8 @@ namespace UnityEngine.Rendering.HighDefinition
 
         public void InitRecursiveRenderer()
         {
-            m_RaytracingFlagTarget = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R8_SNorm, enableRandomWrite: true, useMipMap: false, name: "RaytracingFlagTexture");
-            m_DebugRaytracingTexture = RTHandles.Alloc(Vector2.one, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, enableRandomWrite: true, useDynamicScale: true, useMipMap: false, name: "DebugRaytracingBuffer");
+            m_RaytracingFlagTarget = RTHandles.Alloc(Vector2.one, TextureXR.slices, dimension: TextureXR.dimension, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R8_SNorm, enableRandomWrite: true, useMipMap: false, name: "RaytracingFlagTexture");
+            m_DebugRaytracingTexture = RTHandles.Alloc(Vector2.one, TextureXR.slices, dimension: TextureXR.dimension, filterMode: FilterMode.Point, colorFormat: GraphicsFormat.R16G16B16A16_SFloat, enableRandomWrite: true, useDynamicScale: true, useMipMap: false, name: "DebugRaytracingBuffer");
 
             m_RaytracingFlagStateBlock = new RenderStateBlock
             {
@@ -179,12 +166,13 @@ namespace UnityEngine.Rendering.HighDefinition
             cmd.SetRayTracingTextureParam(forwardShader, HDShaderIDs._SkyTexture, m_SkyManager.skyReflection);
 
             // If this is the right debug mode and we have at least one light, write the first shadow to the de-noised texture
-            HDRenderPipeline hdrp = (RenderPipelineManager.currentPipeline as HDRenderPipeline);
             cmd.SetRayTracingTextureParam(forwardShader, HDShaderIDs._RaytracingPrimaryDebug, m_DebugRaytracingTexture);
-            hdrp.PushFullScreenDebugTexture(hdCamera, cmd, m_DebugRaytracingTexture, FullScreenDebugMode.PrimaryVisibility);
 
             // Run the computation
-            cmd.DispatchRays(forwardShader, m_RayGenShaderName, (uint)hdCamera.actualWidth, (uint)hdCamera.actualHeight, 1);
+            cmd.DispatchRays(forwardShader, m_RayGenShaderName, (uint)hdCamera.actualWidth, (uint)hdCamera.actualHeight, (uint)hdCamera.viewCount);
+
+            HDRenderPipeline hdrp = (RenderPipelineManager.currentPipeline as HDRenderPipeline);
+            hdrp.PushFullScreenDebugTexture(hdCamera, cmd, m_DebugRaytracingTexture, FullScreenDebugMode.RecursiveRayTracing);
         }
     }
 #endif

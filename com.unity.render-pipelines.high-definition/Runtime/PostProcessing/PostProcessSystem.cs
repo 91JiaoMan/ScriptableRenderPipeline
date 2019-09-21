@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using UnityEngine.Assertions;
@@ -240,6 +241,23 @@ namespace UnityEngine.Rendering.HighDefinition
             m_BokehIndirectCmd          = null;
             m_NearBokehTileList         = null;
             m_FarBokehTileList          = null;
+
+            // Cleanup Custom Post Process
+            if (HDRenderPipeline.defaultAsset != null)
+            {
+                foreach (var typeString in HDRenderPipeline.defaultAsset.beforeTransparentCustomPostProcesses)
+                    CleanupCustomPostProcess(typeString);
+                foreach (var typeString in HDRenderPipeline.defaultAsset.beforePostProcessCustomPostProcesses)
+                    CleanupCustomPostProcess(typeString);
+                foreach (var typeString in HDRenderPipeline.defaultAsset.afterPostProcessCustomPostProcesses)
+                    CleanupCustomPostProcess(typeString);
+
+                void CleanupCustomPostProcess(string typeString)
+                {
+                    var comp = VolumeManager.instance.stack.GetComponent(Type.GetType(typeString)) as CustomPostProcessVolumeComponent;
+                    comp.CleanupInternal();
+                }
+            }
         }
 
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -314,6 +332,14 @@ namespace UnityEngine.Rendering.HighDefinition
             }
         }
 
+        void PoolSourceGuard(ref RTHandle src, RTHandle dst, RTHandle colorBuffer)
+        {
+            // Special case to handle the source buffer, we only want to send it back to our
+            // target pool if it's not the input color buffer
+            if (src != colorBuffer) m_Pool.Recycle(src);
+            src = dst;
+        }
+
         public void Render(CommandBuffer cmd, HDCamera camera, BlueNoise blueNoise, RTHandle colorBuffer, RTHandle afterPostProcessTexture, RTHandle lightingBuffer, RenderTargetIdentifier finalRT, RTHandle depthBuffer, bool flipY)
         {
             var dynResHandler = DynamicResolutionHandler.instance;
@@ -322,10 +348,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
             void PoolSource(ref RTHandle src, RTHandle dst)
             {
-                // Special case to handle the source buffer, we only want to send it back to our
-                // target pool if it's not the input color buffer
-                if (src != colorBuffer) m_Pool.Recycle(src);
-                src = dst;
+                PoolSourceGuard(ref src, dst, colorBuffer);
             }
 
             bool isSceneView = camera.camera.cameraType == CameraType.SceneView;
@@ -385,8 +408,6 @@ namespace UnityEngine.Rendering.HighDefinition
 
                 if (m_PostProcessEnabled)
                 {
-                    // TODO: Do we want user effects before post?
-
                     // Temporal anti-aliasing goes first
                     bool taaEnabled = false;
 
@@ -412,6 +433,12 @@ namespace UnityEngine.Rendering.HighDefinition
                                 PoolSource(ref source, destination);
                             }
                         }
+                    }
+
+                    using (new ProfilingSample(cmd, "Custom Post Processes Before PP", CustomSamplerId.CustomPostProcessBeforePP.GetSampler()))
+                    {
+                        foreach (var typeString in HDRenderPipeline.defaultAsset.beforePostProcessCustomPostProcesses)
+                            RenderCustomPostProcess(cmd, camera, ref source, colorBuffer, Type.GetType(typeString));
                     }
 
                     // Depth of Field is done right after TAA as it's easier to just re-project the CoC
@@ -505,9 +532,13 @@ namespace UnityEngine.Rendering.HighDefinition
 
                         PoolSource(ref source, destination);
                     }
-                }
 
-                // TODO: User effects go here
+                    using (new ProfilingSample(cmd, "Custom Post Processes After PP", CustomSamplerId.CustomPostProcessAfterPP.GetSampler()))
+                    {
+                        foreach (var typeString in HDRenderPipeline.defaultAsset.afterPostProcessCustomPostProcesses)
+                            RenderCustomPostProcess(cmd, camera, ref source, colorBuffer, Type.GetType(typeString));
+                    }
+                }
 
                 if (dynResHandler.DynamicResolutionEnabled() &&     // Dynamic resolution is on.
                     camera.antialiasing == AntialiasingMode.FastApproximateAntialiasing &&
@@ -524,7 +555,7 @@ namespace UnityEngine.Rendering.HighDefinition
                 // Final pass
                 using (new ProfilingSample(cmd, "Final Pass", CustomSamplerId.FinalPost.GetSampler()))
                 {
-                    DoFinalPass(cmd, camera, blueNoise, source, afterPostProcessTexture, depthBuffer, finalRT, flipY);
+                    DoFinalPass(cmd, camera, blueNoise, source, afterPostProcessTexture, finalRT, flipY);
                     PoolSource(ref source, null);
                 }
             }
@@ -767,7 +798,8 @@ namespace UnityEngine.Rendering.HighDefinition
             if (m_ResetHistory)
             {
                 m_TAAHistoryBlitPropertyBlock.SetTexture(HDShaderIDs._BlitTexture, source);
-                m_TAAHistoryBlitPropertyBlock.SetVector(HDShaderIDs._BlitScaleBias, new Vector4(1.0f, 1.0f, 0.0f, 0.0f));
+                var rtScaleSource = source.rtHandleProperties.rtHandleScale;
+                m_TAAHistoryBlitPropertyBlock.SetVector(HDShaderIDs._BlitScaleBias, new Vector4(rtScaleSource.x, rtScaleSource.y, 0.0f, 0.0f));
                 m_TAAHistoryBlitPropertyBlock.SetFloat(HDShaderIDs._BlitMipLevel, 0);
                 HDUtils.DrawFullScreen(cmd, HDUtils.GetBlitMaterial(source.rt.dimension), prevHistory, m_TAAHistoryBlitPropertyBlock, 0);
                 HDUtils.DrawFullScreen(cmd, HDUtils.GetBlitMaterial(source.rt.dimension), nextHistory, m_TAAHistoryBlitPropertyBlock, 0);
@@ -781,6 +813,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
             CoreUtils.SetRenderTarget(cmd, destination, depthBuffer);
             cmd.SetRandomWriteTarget(1, nextHistory);
+            cmd.SetGlobalVector(HDShaderIDs._RTHandleScale, destination.rtHandleProperties.rtHandleScale); // <- above blits might have changed the scale
             cmd.DrawProcedural(Matrix4x4.identity, m_TemporalAAMaterial, 0, MeshTopology.Triangles, 3, 1, m_TAAPropertyBlock);
             cmd.ClearRandomWriteTargets();
         }
@@ -990,6 +1023,8 @@ namespace UnityEngine.Rendering.HighDefinition
                     m_Pool.Recycle(fullresCoC);
                     fullresCoC = nextCoCTex;
                 }
+
+                m_HDInstance.PushFullScreenDebugTexture(camera, cmd, fullresCoC, FullScreenDebugMode.DepthOfFieldCoc);
             }
 
             using (new ProfilingSample(cmd, "Pre-Filter", CustomSamplerId.DepthOfFieldPrefilter.GetSampler()))
@@ -2191,7 +2226,7 @@ namespace UnityEngine.Rendering.HighDefinition
 
         #region Final Pass
 
-        void DoFinalPass(CommandBuffer cmd, HDCamera camera, BlueNoise blueNoise, RTHandle source, RTHandle afterPostProcessTexture, RTHandle depthBuffer, RenderTargetIdentifier destination, bool flipY)
+        void DoFinalPass(CommandBuffer cmd, HDCamera camera, BlueNoise blueNoise, RTHandle source, RTHandle afterPostProcessTexture, RenderTargetIdentifier destination, bool flipY)
         {
             // Final pass has to be done in a pixel shader as it will be the one writing straight
             // to the backbuffer eventually
@@ -2296,7 +2331,59 @@ namespace UnityEngine.Rendering.HighDefinition
                 m_FinalPassMaterial.SetTexture(HDShaderIDs._AfterPostProcessTexture, TextureXR.GetBlackTexture());
             }
 
-            HDUtils.DrawFullScreen(cmd, backBufferRect, m_FinalPassMaterial, destination, depthBuffer);
+            HDUtils.DrawFullScreen(cmd, backBufferRect, m_FinalPassMaterial, destination);
+        }
+
+        #endregion
+
+        #region User Post Processes
+
+        internal void DoUserBeforeTransparent(CommandBuffer cmd, HDCamera camera, RTHandle colorBuffer)
+        {
+            RTHandle source = colorBuffer;
+
+            using (new ProfilingSample(cmd, "Custom Post Processes Before Transparent", CustomSamplerId.CustomPostProcessBeforeTransparent.GetSampler()))
+            {
+                bool needsBlitToColorBuffer = false;
+                foreach (var typeString in HDRenderPipeline.defaultAsset.beforeTransparentCustomPostProcesses)
+                    needsBlitToColorBuffer |= RenderCustomPostProcess(cmd, camera, ref source, colorBuffer, Type.GetType(typeString));
+
+                if (needsBlitToColorBuffer)
+                {
+                    Rect backBufferRect = camera.finalViewport;
+                    HDUtils.BlitCameraTexture(cmd, source, colorBuffer);
+                }
+            }
+
+            PoolSourceGuard(ref source, null, colorBuffer);
+        }
+
+        bool RenderCustomPostProcess(CommandBuffer cmd, HDCamera camera, ref RTHandle source, RTHandle colorBuffer, Type customPostProcessComponentType)
+        {
+            if (customPostProcessComponentType == null)
+                return false;
+
+            var stack = VolumeManager.instance.stack;
+
+            if (stack.GetComponent(customPostProcessComponentType) is CustomPostProcessVolumeComponent customPP)
+            {
+                customPP.SetupIfNeeded();
+
+                if (customPP is IPostProcessComponent pp && pp.IsActive())
+                {
+                    var destination = m_Pool.Get(Vector2.one, k_ColorFormat);
+                    CoreUtils.SetRenderTarget(cmd, destination);
+                    using (new ProfilingSample(cmd, customPP.name))
+                    {
+                        customPP.Render(cmd, camera, source, destination);
+                    }
+                    PoolSourceGuard(ref source, destination, colorBuffer);
+
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         #endregion
